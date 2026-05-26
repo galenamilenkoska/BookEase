@@ -1,0 +1,102 @@
+@page "/confirmation"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Booking Confirmed – BookEase</PageTitle>
+
+<div class="confirmation-page">
+    <div class="container">
+        @if (appointment == null && !loading)
+        {
+            <div class="confirm-error">
+                <h2>Appointment not found.</h2>
+                <a href="/" class="btn-home">Back to Home</a>
+            </div>
+        }
+        else if (loading)
+        {
+            <div class="confirm-loading">Loading...</div>
+        }
+        else if (appointment != null)
+        {
+            <div class="confirm-card">
+                <div class="confirm-icon">✅</div>
+                <h1 class="confirm-title">You're Booked!</h1>
+                <p class="confirm-subtitle">
+                    Thanks, <strong>@appointment.CustomerName</strong>! Your appointment has been received and is <strong>pending confirmation</strong>.
+                    We'll send a reminder to <strong>@appointment.CustomerEmail</strong>.
+                </p>
+
+                <div class="confirm-details">
+                    <div class="confirm-row">
+                        <span class="confirm-label">Service</span>
+                        <span class="confirm-value">@appointment.Service.Name</span>
+                    </div>
+                    <div class="confirm-row">
+                        <span class="confirm-label">Date</span>
+                        <span class="confirm-value">@appointment.StartTime.ToString("dddd, MMMM d, yyyy")</span>
+                    </div>
+                    <div class="confirm-row">
+                        <span class="confirm-label">Time</span>
+                        <span class="confirm-value">@appointment.StartTime.ToString("h:mm tt")</span>
+                    </div>
+                    <div class="confirm-row">
+                        <span class="confirm-label">Duration</span>
+                        <span class="confirm-value">@appointment.Service.DurationMinutes minutes</span>
+                    </div>
+                    <div class="confirm-row">
+                        <span class="confirm-label">Price</span>
+                        <span class="confirm-value confirm-price">$@appointment.Service.Price.ToString("F2")</span>
+                    </div>
+                    <div class="confirm-row">
+                        <span class="confirm-label">Status</span>
+                        <span class="status-badge status-pending">@appointment.Status</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(appointment.CustomerPhone))
+                    {
+                        <div class="confirm-row">
+                            <span class="confirm-label">Phone</span>
+                            <span class="confirm-value">@appointment.CustomerPhone</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(appointment.Notes))
+                    {
+                        <div class="confirm-row">
+                            <span class="confirm-label">Notes</span>
+                            <span class="confirm-value">@appointment.Notes</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="confirm-actions">
+                    <a href="/" class="btn-home">Back to Home</a>
+                    <a href="/book" class="btn-book-another">Book Another</a>
+                </div>
+
+                <div class="confirm-location">
+                    <p>📍 <strong>BookEase Barbershop</strong><br />
+                       123 Main Street, Your City &nbsp;·&nbsp; Mon–Sat 9AM–5PM</p>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public int? appointmentId { get; set; }
+
+    private Appointment? appointment;
+    private bool loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (appointmentId.HasValue)
+        {
+            using var db = DbFactory.CreateDbContext();
+            appointment = await db.Appointments
+                .Include(a => a.Service)
+                .FirstOrDefaultAsync(a => a.Id == appointmentId.Value);
+        }
+        loading = false;
+    }
+}

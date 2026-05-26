@@ -1,0 +1,162 @@
+@page "/admin"
+@rendermode InteractiveServer
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Admin – BookEase</PageTitle>
+
+<div class="admin-page">
+    <div class="admin-hero">
+        <div class="container">
+            <h1 class="admin-title">Appointment Dashboard</h1>
+            <p class="admin-subtitle">Manage all upcoming appointments.</p>
+        </div>
+    </div>
+
+    <div class="container admin-container">
+
+        @if (!string.IsNullOrEmpty(statusMessage))
+        {
+            <div class="alert-success">@statusMessage</div>
+        }
+
+        <!-- Filters -->
+        <div class="admin-filters">
+            <button class="filter-btn @(filter == "upcoming" ? "filter-active" : "")" @onclick='() => SetFilter("upcoming")'>Upcoming</button>
+            <button class="filter-btn @(filter == "all" ? "filter-active" : "")" @onclick='() => SetFilter("all")'>All</button>
+            <button class="filter-btn @(filter == "pending" ? "filter-active" : "")" @onclick='() => SetFilter("pending")'>Pending</button>
+            <button class="filter-btn @(filter == "confirmed" ? "filter-active" : "")" @onclick='() => SetFilter("confirmed")'>Confirmed</button>
+            <button class="filter-btn @(filter == "cancelled" ? "filter-active" : "")" @onclick='() => SetFilter("cancelled")'>Cancelled</button>
+        </div>
+
+        @if (appointments.Count == 0)
+        {
+            <div class="admin-empty">
+                <p>📭 No appointments found for this filter.</p>
+            </div>
+        }
+        else
+        {
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Date &amp; Time</th>
+                            <th>Customer</th>
+                            <th>Service</th>
+                            <th>Duration</th>
+                            <th>Price</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var appt in appointments)
+                        {
+                            <tr class="appt-row @(appt.Status == AppointmentStatus.Cancelled ? "row-cancelled" : "")">
+                                <td class="td-id">#@appt.Id</td>
+                                <td class="td-time">
+                                    <div class="time-date">@appt.StartTime.ToString("MMM d, yyyy")</div>
+                                    <div class="time-hour">@appt.StartTime.ToString("h:mm tt")</div>
+                                </td>
+                                <td class="td-customer">
+                                    <div class="cust-name">@appt.CustomerName</div>
+                                    <div class="cust-email">@appt.CustomerEmail</div>
+                                    @if (!string.IsNullOrEmpty(appt.CustomerPhone))
+                                    {
+                                        <div class="cust-phone">@appt.CustomerPhone</div>
+                                    }
+                                </td>
+                                <td class="td-service">
+                                    @appt.Service.Name
+                                    @if (!string.IsNullOrEmpty(appt.Notes))
+                                    {
+                                        <div class="appt-notes" title="@appt.Notes">📝 @(appt.Notes.Length > 30 ? appt.Notes[..30] + "…" : appt.Notes)</div>
+                                    }
+                                </td>
+                                <td class="td-duration">@appt.Service.DurationMinutes min</td>
+                                <td class="td-price">$@appt.Service.Price.ToString("F2")</td>
+                                <td class="td-status">
+                                    <span class="status-badge @GetStatusClass(appt.Status)">@appt.Status</span>
+                                </td>
+                                <td class="td-actions">
+                                    @if (appt.Status != AppointmentStatus.Confirmed && appt.Status != AppointmentStatus.Cancelled)
+                                    {
+                                        <button class="btn-confirm" @onclick="() => UpdateStatus(appt.Id, AppointmentStatus.Confirmed)">Confirm</button>
+                                    }
+                                    @if (appt.Status != AppointmentStatus.Cancelled)
+                                    {
+                                        <button class="btn-cancel" @onclick="() => UpdateStatus(appt.Id, AppointmentStatus.Cancelled)">Cancel</button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="admin-summary">
+                <span>Total: <strong>@appointments.Count</strong></span>
+                <span>Pending: <strong>@appointments.Count(a => a.Status == AppointmentStatus.Pending)</strong></span>
+                <span>Confirmed: <strong>@appointments.Count(a => a.Status == AppointmentStatus.Confirmed)</strong></span>
+                <span>Cancelled: <strong>@appointments.Count(a => a.Status == AppointmentStatus.Cancelled)</strong></span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<Appointment> appointments = new();
+    private string filter = "upcoming";
+    private string? statusMessage;
+
+    protected override async Task OnInitializedAsync() => await LoadAppointments();
+
+    private async Task LoadAppointments()
+    {
+        using var db = DbFactory.CreateDbContext();
+        var query = db.Appointments.Include(a => a.Service).AsQueryable();
+
+        query = filter switch
+        {
+            "upcoming" => query.Where(a => a.StartTime >= DateTime.Now && a.Status != AppointmentStatus.Cancelled),
+            "pending" => query.Where(a => a.Status == AppointmentStatus.Pending),
+            "confirmed" => query.Where(a => a.Status == AppointmentStatus.Confirmed),
+            "cancelled" => query.Where(a => a.Status == AppointmentStatus.Cancelled),
+            _ => query
+        };
+
+        appointments = await query.OrderBy(a => a.StartTime).ToListAsync();
+    }
+
+    private async Task SetFilter(string newFilter)
+    {
+        filter = newFilter;
+        statusMessage = null;
+        await LoadAppointments();
+    }
+
+    private async Task UpdateStatus(int id, AppointmentStatus newStatus)
+    {
+        using var db = DbFactory.CreateDbContext();
+        var appt = await db.Appointments.FindAsync(id);
+        if (appt == null) return;
+
+        appt.Status = newStatus;
+        await db.SaveChangesAsync();
+
+        statusMessage = newStatus == AppointmentStatus.Confirmed
+            ? $"Appointment #{id} has been confirmed."
+            : $"Appointment #{id} has been cancelled.";
+
+        await LoadAppointments();
+        StateHasChanged();
+    }
+
+    private static string GetStatusClass(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Confirmed => "status-confirmed",
+        AppointmentStatus.Cancelled => "status-cancelled",
+        _ => "status-pending"
+    };
+}

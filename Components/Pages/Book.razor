@@ -1,0 +1,418 @@
+@page "/book"
+@rendermode InteractiveServer
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject NavigationManager Navigation
+@inject IEmailService EmailService
+
+<PageTitle>Book an Appointment – BookEase</PageTitle>
+
+<div class="book-page">
+    <div class="book-hero">
+        <div class="container">
+            <h1 class="book-title">Book Your Appointment</h1>
+            <p class="book-subtitle">Pick a service, choose a time, and you're all set.</p>
+        </div>
+    </div>
+
+    <div class="container book-container">
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <div class="alert-error">
+                <strong>Oops!</strong> @errorMessage
+            </div>
+        }
+
+        <!-- Step Progress -->
+        <div class="step-progress">
+            <div class="step @(currentStep >= 1 ? "step-active" : "") @(currentStep > 1 ? "step-done" : "")">
+                <div class="step-num">@(currentStep > 1 ? "✓" : "1")</div>
+                <div class="step-label">Service</div>
+            </div>
+            <div class="step-line @(currentStep > 1 ? "step-line-done" : "")"></div>
+            <div class="step @(currentStep >= 2 ? "step-active" : "") @(currentStep > 2 ? "step-done" : "")">
+                <div class="step-num">@(currentStep > 2 ? "✓" : "2")</div>
+                <div class="step-label">Date &amp; Time</div>
+            </div>
+            <div class="step-line @(currentStep > 2 ? "step-line-done" : "")"></div>
+            <div class="step @(currentStep >= 3 ? "step-active" : "")">
+                <div class="step-num">3</div>
+                <div class="step-label">Your Details</div>
+            </div>
+        </div>
+
+        <!-- Step 1: Choose Service -->
+        @if (currentStep == 1)
+        {
+            <div class="step-panel">
+                <h2 class="step-heading">Choose a Service</h2>
+                <div class="services-grid-book">
+                    @foreach (var svc in services)
+                    {
+                        <div class="service-select-card @(selectedServiceId == svc.Id ? "selected" : "")"
+                             @onclick="() => SelectService(svc.Id)">
+                            <div class="ssc-check">@(selectedServiceId == svc.Id ? "✓" : "")</div>
+                            <h4 class="ssc-name">@svc.Name</h4>
+                            <p class="ssc-desc">@svc.Description</p>
+                            <div class="ssc-meta">
+                                <span class="ssc-duration">⏱ @svc.DurationMinutes min</span>
+                                <span class="ssc-price">$@svc.Price.ToString("F2")</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+                <div class="step-actions">
+                    <button class="btn-next" disabled="@(selectedServiceId == 0)" @onclick="GoToStep2">
+                        Continue to Date &amp; Time →
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- Step 2: Choose Date & Time -->
+        @if (currentStep == 2)
+        {
+            <div class="step-panel">
+                <h2 class="step-heading">Choose a Date &amp; Time</h2>
+                <p class="step-subheading">
+                    Service: <strong>@selectedService?.Name</strong> &nbsp;·&nbsp; @selectedService?.DurationMinutes min &nbsp;·&nbsp; $@selectedService?.Price.ToString("F2")
+                </p>
+
+                <div class="date-picker-wrap">
+                    <label class="field-label">Select a Date</label>
+                    <input type="date"
+                           class="date-input"
+                           value="@selectedDateStr"
+                           min="@DateTime.Today.ToString("yyyy-MM-dd")"
+                           @onchange="OnDateChanged" />
+                </div>
+
+                @if (selectedDate.HasValue)
+                {
+                    <div class="slots-section">
+                        <h3 class="slots-heading">Available Times on @selectedDate.Value.ToString("dddd, MMMM d")</h3>
+                        @if (availableSlots.Count == 0)
+                        {
+                            <div class="no-slots">
+                                <p>😔 No available slots on this date. Please choose another day.</p>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="slots-grid">
+                                @foreach (var slot in availableSlots)
+                                {
+                                    <button class="slot-btn @(selectedSlot == slot ? "slot-selected" : "")"
+                                            @onclick="() => SelectSlot(slot)">
+                                        @slot.ToString("h:mm tt")
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="step-actions">
+                    <button class="btn-back" @onclick="GoToStep1">← Back</button>
+                    <button class="btn-next" disabled="@(!selectedSlot.HasValue)" @onclick="GoToStep3">
+                        Continue to Your Details →
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- Step 3: Contact Details -->
+        @if (currentStep == 3)
+        {
+            <div class="step-panel">
+                <h2 class="step-heading">Your Details</h2>
+
+                <div class="booking-summary">
+                    <div class="summary-row">
+                        <span class="summary-label">Service</span>
+                        <span class="summary-value">@selectedService?.Name</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Date &amp; Time</span>
+                        <span class="summary-value">@selectedSlot?.ToString("dddd, MMMM d 'at' h:mm tt")</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Duration</span>
+                        <span class="summary-value">@selectedService?.DurationMinutes minutes</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="summary-label">Price</span>
+                        <span class="summary-value summary-price">$@selectedService?.Price.ToString("F2")</span>
+                    </div>
+                </div>
+
+                <EditForm Model="bookingModel" OnValidSubmit="SubmitBooking">
+                    <DataAnnotationsValidator />
+
+                    <div class="form-group">
+                        <label class="field-label">Full Name <span class="required">*</span></label>
+                        <InputText class="@NameInputClass"
+                                   placeholder="e.g. James Anderson"
+                                   @bind-Value="bookingModel.CustomerName" />
+                        <ValidationMessage For="() => bookingModel.CustomerName" class="field-error" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label">Email Address <span class="required">*</span></label>
+                        <InputText class="@EmailInputClass"
+                                   placeholder="e.g. james@example.com"
+                                   @bind-Value="bookingModel.CustomerEmail" />
+                        <ValidationMessage For="() => bookingModel.CustomerEmail" class="field-error" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label">Phone Number <span class="optional">(optional)</span></label>
+                        <InputText class="form-input"
+                                   placeholder="e.g. (555) 123-4567"
+                                   @bind-Value="bookingModel.CustomerPhone" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="field-label">Notes <span class="optional">(optional)</span></label>
+                        <InputTextArea class="form-input form-textarea"
+                                       placeholder="Any specific requests or preferences?"
+                                       @bind-Value="bookingModel.Notes" rows="3" />
+                    </div>
+
+                    <div class="step-actions">
+                        <button type="button" class="btn-back" @onclick="GoToStep2">← Back</button>
+                        <button type="submit" class="btn-submit" disabled="@isSubmitting">
+                            @if (isSubmitting)
+                            {
+                                <span>Booking...</span>
+                            }
+                            else
+                            {
+                                <span>Confirm Booking ✓</span>
+                            }
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public int? serviceId { get; set; }
+
+    private string NameInputClass => fieldErrors.ContainsKey("CustomerName") ? "form-input input-error" : "form-input";
+    private string EmailInputClass => fieldErrors.ContainsKey("CustomerEmail") ? "form-input input-error" : "form-input";
+
+    private int currentStep = 1;
+    private List<Service> services = new();
+    private int selectedServiceId = 0;
+    private Service? selectedService;
+    private DateTime? selectedDate;
+    private string selectedDateStr = string.Empty;
+    private DateTime? selectedSlot;
+    private List<DateTime> availableSlots = new();
+    private bool isSubmitting = false;
+    private string? errorMessage;
+    private Dictionary<string, string> fieldErrors = new();
+
+    private BookingFormModel bookingModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var db = DbFactory.CreateDbContext();
+        services = await db.Services.OrderBy(s => s.Name).ToListAsync();
+
+        if (serviceId.HasValue && serviceId.Value > 0)
+        {
+            selectedServiceId = serviceId.Value;
+            selectedService = services.FirstOrDefault(s => s.Id == selectedServiceId);
+            if (selectedService != null)
+                currentStep = 2;
+        }
+    }
+
+    private void SelectService(int id)
+    {
+        selectedServiceId = id;
+        selectedService = services.FirstOrDefault(s => s.Id == id);
+    }
+
+    private void GoToStep1()
+    {
+        currentStep = 1;
+        selectedDate = null;
+        selectedDateStr = string.Empty;
+        selectedSlot = null;
+        availableSlots.Clear();
+        errorMessage = null;
+    }
+
+    private void GoToStep2()
+    {
+        if (selectedServiceId == 0) return;
+        selectedService = services.FirstOrDefault(s => s.Id == selectedServiceId);
+        currentStep = 2;
+        errorMessage = null;
+    }
+
+    private void GoToStep3()
+    {
+        if (!selectedSlot.HasValue) return;
+        currentStep = 3;
+        errorMessage = null;
+    }
+
+    private async Task OnDateChanged(ChangeEventArgs e)
+    {
+        selectedDateStr = e.Value?.ToString() ?? string.Empty;
+        selectedSlot = null;
+        availableSlots.Clear();
+
+        if (DateTime.TryParse(selectedDateStr, out var parsed))
+        {
+            selectedDate = parsed.Date;
+            await LoadAvailableSlots();
+        }
+        else
+        {
+            selectedDate = null;
+        }
+    }
+
+    private async Task LoadAvailableSlots()
+    {
+        if (!selectedDate.HasValue || selectedService == null) return;
+
+        using var db = DbFactory.CreateDbContext();
+        var bookings = await db.Appointments
+            .Include(a => a.Service)
+            .Where(a => a.StartTime.Date == selectedDate.Value.Date
+                        && a.Status != AppointmentStatus.Cancelled)
+            .ToListAsync();
+
+        availableSlots = ComputeAvailableSlots(bookings, selectedService, selectedDate.Value);
+    }
+
+    private static List<DateTime> ComputeAvailableSlots(
+        List<Appointment> bookings, Service service, DateTime date)
+    {
+        var slots = new List<DateTime>();
+        var businessStart = date.Date.AddHours(9);
+        var businessEnd = date.Date.AddHours(17);
+        var duration = TimeSpan.FromMinutes(service.DurationMinutes);
+        var now = DateTime.Now;
+
+        for (var slot = businessStart; slot + duration <= businessEnd; slot = slot.AddMinutes(30))
+        {
+            if (slot <= now) continue;
+
+            var slotEnd = slot + duration;
+            var isOccupied = bookings.Any(b =>
+                b.StartTime < slotEnd &&
+                b.StartTime.AddMinutes(b.Service.DurationMinutes) > slot);
+
+            if (!isOccupied)
+                slots.Add(slot);
+        }
+
+        return slots;
+    }
+
+    private void SelectSlot(DateTime slot) => selectedSlot = slot;
+
+    private async Task SubmitBooking()
+    {
+        if (!selectedSlot.HasValue || selectedService == null)
+        {
+            errorMessage = "Please complete all steps before submitting.";
+            return;
+        }
+
+        isSubmitting = true;
+        errorMessage = null;
+
+        try
+        {
+            using var db = DbFactory.CreateDbContext();
+
+            // Server-side double-booking check
+            var duration = TimeSpan.FromMinutes(selectedService.DurationMinutes);
+            var slotEnd = selectedSlot.Value + duration;
+
+            var conflicts = await db.Appointments
+                .Include(a => a.Service)
+                .Where(a => a.ServiceId != 0
+                            && a.Status != AppointmentStatus.Cancelled
+                            && a.StartTime < slotEnd
+                            && a.StartTime > selectedSlot.Value.AddMinutes(-selectedService.DurationMinutes * 2))
+                .ToListAsync();
+
+            var hasConflict = conflicts.Any(b =>
+                b.StartTime < slotEnd &&
+                b.StartTime.AddMinutes(b.Service.DurationMinutes) > selectedSlot.Value);
+
+            if (hasConflict)
+            {
+                errorMessage = "That time slot was just taken. Please go back and choose a different time.";
+                isSubmitting = false;
+                currentStep = 2;
+                await LoadAvailableSlots();
+                return;
+            }
+
+            var appointment = new Appointment
+            {
+                ServiceId = selectedServiceId,
+                CustomerName = bookingModel.CustomerName.Trim(),
+                CustomerEmail = bookingModel.CustomerEmail.Trim(),
+                CustomerPhone = string.IsNullOrWhiteSpace(bookingModel.CustomerPhone)
+                    ? null : bookingModel.CustomerPhone.Trim(),
+                StartTime = selectedSlot.Value,
+                Notes = string.IsNullOrWhiteSpace(bookingModel.Notes)
+                    ? null : bookingModel.Notes.Trim(),
+                Status = AppointmentStatus.Pending
+            };
+
+            db.Appointments.Add(appointment);
+            await db.SaveChangesAsync();
+
+            // Send confirmation email (failures are caught inside the service — won't break booking)
+            await EmailService.SendBookingConfirmationAsync(new BookingEmailData(
+                CustomerName: appointment.CustomerName,
+                CustomerEmail: appointment.CustomerEmail,
+                ServiceName: selectedService.Name,
+                StartTime: appointment.StartTime,
+                DurationMinutes: selectedService.DurationMinutes,
+                Price: selectedService.Price,
+                AppointmentId: appointment.Id,
+                Notes: appointment.Notes
+            ));
+
+            Navigation.NavigateTo($"/confirmation?appointmentId={appointment.Id}");
+        }
+        catch (Exception)
+        {
+            errorMessage = "An error occurred while booking. Please try again.";
+            isSubmitting = false;
+        }
+    }
+
+    public class BookingFormModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Please enter your name.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(100)]
+        public string CustomerName { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "Please enter your email address.")]
+        [System.ComponentModel.DataAnnotations.EmailAddress(ErrorMessage = "Please enter a valid email address.")]
+        [System.ComponentModel.DataAnnotations.MaxLength(200)]
+        public string CustomerEmail { get; set; } = string.Empty;
+
+        [System.ComponentModel.DataAnnotations.MaxLength(20)]
+        public string? CustomerPhone { get; set; }
+
+        [System.ComponentModel.DataAnnotations.MaxLength(500)]
+        public string? Notes { get; set; }
+    }
+}

@@ -1,0 +1,41 @@
+@inherits LayoutComponentBase
+
+<header class="site-header">
+    <div class="header-inner container-fluid">
+        <a href="/" class="brand">
+            <span class="brand-scissors">✂</span>
+            <span class="brand-text">BookEase</span>
+        </a>
+        <nav class="header-nav">
+            <a href="/" class="nav-link-item">Home</a>
+            <a href="/book" class="nav-link-item nav-book-btn">Book Now</a>
+            <a href="/admin" class="nav-link-item nav-admin-link">Admin</a>
+        </nav>
+        <button class="mobile-menu-toggle" onclick="document.getElementById('mobileNav').classList.toggle('open')">
+            <span></span><span></span><span></span>
+        </button>
+    </div>
+    <div id="mobileNav" class="mobile-nav">
+        <a href="/" class="mobile-nav-link">Home</a>
+        <a href="/book" class="mobile-nav-link">Book Now</a>
+        <a href="/admin" class="mobile-nav-link">Admin</a>
+    </div>
+</header>
+
+<main class="site-main">
+    @Body
+</main>
+
+<footer class="site-footer">
+    <div class="container text-center">
+        <p class="mb-1"><strong>BookEase Barbershop</strong></p>
+        <p class="footer-hours">Mon–Sat: 9:00 AM – 5:00 PM &nbsp;|&nbsp; 123 Main Street, Your City</p>
+        <p class="footer-copy">&copy; @DateTime.Now.Year BookEase. All rights reserved.</p>
+    </div>
+</footer>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>

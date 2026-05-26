@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# IDE / OS
+.vs/
+.idea/
+*.user
+.DS_Store
+Thumbs.db
+
+# Build output (rebuilt inside Docker)
+bin/
+obj/
+publish/
+publish_test/
+
+# SQLite database (recreated on startup)
+*.db
+*.db-shm
+*.db-wal
+
+# Docs / config not needed in image
+README.md
+.dockerignore
+.claude/

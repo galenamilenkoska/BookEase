@@ -1,0 +1,29 @@
+## .NET build output
+bin/
+obj/
+publish/
+
+## SQLite database (auto-created at runtime)
+*.db
+*.db-shm
+*.db-wal
+
+## User-specific VS files
+*.user
+.vs/
+*.suo
+*.userprefs
+
+## Rider
+.idea/
+
+## OS files
+.DS_Store
+Thumbs.db
+
+## Environment / secrets — NEVER commit these
+.env
+appsettings.Production.json
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json
